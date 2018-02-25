@@ -1,0 +1,682 @@
+---
+title: 'House Prices: Advanced Regression Techniques'
+author: "NYC Data Science Academy"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      cache = TRUE,
+                      warning = FALSE, 
+                      message = FALSE,
+                      tidy=FALSE,
+                      fig.height=6,
+                      fig.width=10)
+# setwd("~/Workspace/kaggle/housePriceAmes/")
+```
+
+
+## OUTLINE
+
+1. Introduction
+2. Loading Data
+3. Visualizations
+4. Pre-Processing
+5. Model Training and Parameter Tuning
+6. Variable Importance and Feature selection
+7. Summary
+
+## 1. Introduction
+
+![](https://kaggle2.blob.core.windows.net/competitions/kaggle/5407/media/housesbanner.png)
+
+
+"Ask a home buyer to describe their dream house, and they probably won't begin with the height of the basement ceiling or the proximity to an east-west railroad. But this playground competition's dataset proves that much more influences price negotiations than the number of bedrooms or a white-picket fence.
+
+With 79 explanatory variables describing (almost) every aspect of residential homes in Ames, Iowa, this problem challenges you to predict the final price of each home.
+
+The potential for creative feature engineering provides a rich opportunity for fun and learning. This dataset lends itself to advanced regression techniques like random forests and gradient boosting with the popular XGBoost library."
+
+## 2. Data Loading & Preparation
+
+### 2.1 Loading data from csv
+
+```{r load_data}
+## load training data
+house_train <- read.csv("./train.csv", 
+                        header = TRUE, 
+                        na.strings = "",
+                        stringsAsFactors = FALSE)
+## load test data
+house_test <- read.csv("./test.csv", 
+                        header = TRUE, 
+                        na.strings = "",
+                        stringsAsFactors = FALSE)
+dim(house_train)
+dim(house_test)
+str(house_train)
+```
+
+### 2.2 Getting factor levels from data description
+
+```{r factor_levels}
+## get levels of categorical features from data description
+factorLevel <- list()
+conn <- file("./data_description.txt", open="r")
+f <-readLines(conn)
+for (line in f){
+  if(!grepl("^[[:blank:]]", line) & grepl(": ", line)) {
+    col_name <<- trimws(gsub(":.*", "", line))
+  } else {
+    level <- trimws(gsub("\t.*", "", line))
+    if (level != "") {
+      factorLevel[[col_name]] <- c(factorLevel[[col_name]], level)
+    }
+  }
+}
+close(conn)
+
+print(factorLevel[1:6])
+```
+
+### 2.3 Checking factor levels with data
+
+```{r check_levels}
+## check if levels in description cover unique data values
+for (varname in names(factorLevel)) {
+  levelDiff <- setdiff(unique(house_train[[varname]]), 
+                       factorLevel[[varname]])
+  if(length(levelDiff)) {
+    print(paste(varname, 
+                paste(levelDiff, collapse = ", "), 
+                sep = ": "))
+  }
+}
+
+```
+
+
+### 2.4 Fixing level names
+
+```{r fix_levels}
+## fix those levels that don't match with data
+## ignore "NA" as they will be considered as missing when converting categorical to factors
+
+unique(house_train$MSZoning)
+factorLevel$MSZoning
+factorLevel$MSZoning[2] <- "C (all)"
+
+unique(house_train$Neighborhood)
+factorLevel$Neighborhood
+factorLevel$Neighborhood[13] <- "NAmes"
+
+unique(house_train$BldgType)
+factorLevel$BldgType
+factorLevel$BldgType[c(2,3,5)] <- c("2fmCon","Duplex","Twnhs")
+
+unique(house_train$Exterior2nd)
+factorLevel$Exterior2nd
+factorLevel$Exterior2nd[c(17,6,3)] <- c("Wd Shng","CmentBd","Brk Cmn")
+
+## Get levels that only appear in the dataset
+for (varname in names(factorLevel)) {
+  factorLevel[[varname]] <- intersect(factorLevel[[varname]],
+                                      unique(house_train[[varname]]))
+}
+
+## Re-run the previous cell to double check
+```
+
+### 2.5 Converting column data types
+
+```{r convert_types}
+## convert column datatype to numeric / factor
+## On training dataset
+for (varname in names(house_train)[-1]) {
+  if (varname %in% names(factorLevel)) {
+    house_train[[varname]] <- factor(house_train[[varname]], 
+                                     levels = factorLevel[[varname]])
+  } else {
+    house_train[[varname]] <- as.numeric(house_train[[varname]])
+  }
+}
+
+## On testing dataset
+for (varname in names(house_test)[-1]) {
+  if (varname %in% names(factorLevel)) {
+    house_test[[varname]] <- factor(house_test[[varname]], 
+                                    levels = factorLevel[[varname]])
+  } else {
+    house_test[[varname]] <- as.numeric(house_test[[varname]])
+  }
+}
+```
+
+
+### 2.6 (Optional) Saving data
+
+```{r save_loaded}
+house_train$Id <- NULL
+rownames(house_test) <- house_test$Id
+house_test$Id <- NULL
+save(house_train, house_test, file = "./house_loaded.RData")
+```
+
+
+## 3. Visualizations
+
+### Loading data (from step 2)
+
+```{r read_loaded}
+library(ggplot2)
+library(gridExtra)
+library(tabplot)
+library(lsr)
+library(corrplot)
+library(dplyr)
+
+rm(list = ls())
+load("./house_loaded.RData")
+```
+
+
+### 3.1 SalePrice Histogram
+
+```{r hist_saleprice}
+## histogram on SalePrice
+grid.arrange(ggplot(house_train) + 
+               geom_histogram(aes(SalePrice), bins = 20), 
+             ggplot(house_train) + 
+               geom_histogram(aes(log(SalePrice + 1)), bins = 20), 
+             ncol = 2)
+```
+
+### 3.2 Plotting all features sorted by SalePrice
+
+```{r table_plot, fig.height=4, fig.width=10}  
+## table plot all features on sortded SalePrice
+colMtx <- matrix(names(house_train)[1:length(house_train)-1], nrow = 8)
+for (i in 1:ncol(colMtx)) {
+  tableplot(house_train, 
+            select_string = c(colMtx[,i], "SalePrice"), 
+            sortCol = "SalePrice", decreasing = TRUE, 
+            nBins = 30)
+}
+```
+
+### 3.3 Correlations between Continuous Variables
+
+```{r corrplot_numerical}
+numeric_features <- names(house_train)[sapply(house_train, is.numeric)]
+numeric_features <- numeric_features[-length(numeric_features)]
+print(numeric_features)
+## correlation between continuous variables in training dataset - pearson
+corr_numtran <- cor(house_train %>% 
+                      select(one_of(numeric_features, "SalePrice")), 
+                    method = "pearson", 
+                    use = "pairwise.complete.obs")
+
+corrplot(corr_numtran, method = "color", order="hclust")
+
+## correlation between continuous variables in test dataset - pearson
+# corr_numtest <- cor(house_test %>% 
+#                       select(one_of(numeric_features)), 
+#                     method = "pearson", 
+#                     use = "pairwise.complete.obs")
+# 
+# corrplot(corr_numtest, method = "color", order="hclust")
+```
+
+
+### 3.4 Correlations between Ordinal Variables
+
+```{r ordinal_features}
+## ordinal features are those who contain one of the follow levels
+ordinal_levels <- c("Reg", "5", "TA", "No", "Unf", 
+                    "MnPrv", "Y", "Mod", "HLS", "1Fam")
+ordinal_features <- character(0)
+
+for(feature in names(house_train)) {
+  if(is.factor(house_train[,feature]) && 
+     length(intersect(ordinal_levels, levels(house_train[,feature])))) {
+    ordinal_features <- c(ordinal_features, feature)
+  }
+}
+
+print(ordinal_features)
+```
+
+```{r corrplot_ordinal}
+## correlation between ordinal variables in training dataset - kendall
+corr_ordtran <- cor(data.matrix(house_train %>% 
+                                  select(one_of(ordinal_features))), 
+                    method = "kendall", 
+                    use = "pairwise.complete.obs")
+
+corrplot(corr_ordtran, method = "color", order="hclust")
+
+## correlation between ordinal variables in test dataset - kendall
+# corr_ordtest <- cor(data.matrix(house_test %>% 
+#                                   select(one_of(ordinal_features))), 
+#                     method = "kendall", 
+#                     use = "pairwise.complete.obs")
+# 
+# corrplot(corr_ordtest, method = "color", order="hclust")
+```
+
+### 3.5 Correlations between Nominal Variables
+
+```{r corrplot_nominal}
+## Cramér's V is a measure of association between two nominal variables, giving a value between 0 and +1 (inclusive)
+cor.cramersV <- function(data) {
+  cramersV(table(data[complete.cases(data),]))
+}
+
+nominal_features <- setdiff(names(house_train), 
+                            c(numeric_features, ordinal_features, "SalePrice"))
+
+
+## cramers V in test dataset
+corr_nomtran <- sapply(nominal_features, 
+                       function(x) sapply(nominal_features,
+                                          function(y) cor.cramersV(house_train[, c(x, y)])))
+
+corrplot(corr_nomtran, method = "color", order="hclust")
+```
+
+### 3.6 Correlations between Ordinal Variables vs. SalePrice
+
+```{r corrplot_ordinal_2}
+## coorelation between ordered categorical variables in training - spearman
+cor.ordcnt <- function(data, x, y) {
+  cor(as.numeric(data[[x]]), as.numeric(data[[y]]), 
+                 method = "spearman", 
+                 use = "pairwise.complete.obs")
+}
+
+corr_ordcnttran <- data.frame(Variable = ordinal_features,
+                              Correlation = sapply(ordinal_features, 
+                                                function(x) -cor.ordcnt(house_train, x, "SalePrice")))
+
+ggplot(corr_ordcnttran, aes(reorder(Variable, Correlation), Correlation)) + 
+  geom_bar(stat = "identity") +
+  coord_flip()
+```
+
+```{r boxplot_ordinal}
+## Might be a good idea to convert some ordinal predictors to continuous 
+grid.arrange(
+  ggplot(house_train, aes(x = OverallQual, y = SalePrice)) + geom_boxplot(),
+  ggplot(house_train, aes(x = ExterQual, y = SalePrice)) + geom_boxplot(),
+  ggplot(house_train, aes(x = BsmtQual, y = SalePrice)) + geom_boxplot(),
+  ggplot(house_train, aes(x = KitchenQual, y = SalePrice)) + geom_boxplot(),
+  ggplot(house_train, aes(x = GarageFinish, y = SalePrice)) + geom_boxplot(),
+  ggplot(house_train, aes(x = FireplaceQu, y = SalePrice)) + geom_boxplot(),
+  ncol = 2
+)
+grid.arrange(
+  ggplot(house_train, aes(x = as.integer(OverallQual), y = SalePrice)) + geom_point(),
+  ggplot(house_train, aes(x = as.integer(ExterQual), y = SalePrice)) + geom_point(),
+  ggplot(house_train, aes(x = as.integer(BsmtQual), y = SalePrice)) + geom_point(),
+  ggplot(house_train, aes(x = as.integer(KitchenQual), y = SalePrice)) + geom_point(),
+  ggplot(house_train, aes(x = as.integer(GarageFinish), y = SalePrice)) + geom_point(),
+  ggplot(house_train, aes(x = as.integer(FireplaceQu), y = SalePrice)) + geom_point(),
+  ncol = 2
+)
+
+tableplot(house_train %>% select(one_of("SalePrice","OverallQual", "ExterQual", "BsmtQual",
+                                        "KitchenQual", "GarageFinish", "FireplaceQu")), 
+          decreasing = TRUE, 
+          nBins = 18,
+          colorNA = "#FF1414", colorNA_num = "#FF1414")
+```
+
+
+## 4. Pre-Processing
+
+### 4.1 Understanding Missingness
+
+```{r missing_check}
+library(VIM)
+library(caret)
+library(RANN)
+## check missing values
+col_missing <- names(house_train)[colSums(is.na(house_train)) > 0]
+aggr(house_train[,col_missing], prop = F, numbers = T)
+Filter(function(x) x > 0, colSums(is.na(house_train)))
+
+col_missing <- names(house_test)[colSums(is.na(house_test)) > 0]
+aggr(house_test[,col_missing], prop = F, numbers = T)
+Filter(function(x) x > 0, colSums(is.na(house_test)))
+
+```
+
+### 4.2 Missing Pattern of GarageYrBlt
+
+```{r garage_check}
+## table plot all features on sortded SalePrice
+tableplot(house_train %>% select(starts_with("Garage")), 
+          decreasing = TRUE, 
+          nBins = 18,
+          colorNA = "#FF1414", colorNA_num = "#FF1414")
+tableplot(house_test %>% select(starts_with("Garage")), 
+          decreasing = TRUE, 
+          nBins = 19,
+          colorNA = "#FF1414", colorNA_num = "#FF1414")
+
+grid.arrange(
+  ggplot(house_train, 
+         aes(YearBuilt, ifelse(is.na(GarageYrBlt), YearBuilt, GarageYrBlt))) +
+    geom_point(aes(color = is.na(GarageYrBlt))),
+  ggplot(house_test, 
+         aes(YearBuilt, ifelse(is.na(GarageYrBlt), YearBuilt, GarageYrBlt))) +
+    geom_point(aes(color = is.na(GarageYrBlt))),
+  ncol = 2
+)
+```
+
+### 4.3 Imputing GarageYrBlt
+
+```{r impute_garage}
+## Fix outlier
+house_test$GarageYrBlt[which(house_test$GarageYrBlt == 2207)] <- 2007
+
+## Create new feature: hasGarage
+## Impute GarageYrBlt with YearBuilt
+house_train <- house_train %>%
+  mutate(hasGarage = ifelse(is.na(GarageYrBlt), 0, 1),
+         GarageBlt = ifelse(is.na(GarageYrBlt), 0, GarageYrBlt - YearBuilt)) %>%
+  select(-GarageYrBlt)
+
+house_test <- house_test %>%
+  mutate(hasGarage = ifelse(is.na(GarageYrBlt), 0, 1),
+         GarageBlt = ifelse(is.na(GarageYrBlt), 0, GarageYrBlt - YearBuilt)) %>%
+  select(-GarageYrBlt)
+
+grid.arrange(
+  ggplot(house_train, aes(YearBuilt, GarageBlt)) +
+    geom_point(aes(color = as.factor(hasGarage))),
+  ggplot(house_test, aes(YearBuilt, GarageBlt)) +
+    geom_point(aes(color = as.factor(hasGarage))),
+  ncol = 2
+)
+```
+
+### 4.4 Transforming YearRemodAdd
+
+```{r change_RemodAdd}
+grid.arrange(
+  ggplot(house_train, aes(YearBuilt, YearRemodAdd)) +
+    geom_point(aes(color = (YearRemodAdd == YearBuilt))),
+  ggplot(house_test, aes(YearBuilt, YearRemodAdd)) +
+    geom_point(aes(color = (YearRemodAdd == YearBuilt))),
+  ncol = 2
+)
+
+house_train <- house_train %>%
+  mutate(isRemod = ifelse(YearRemodAdd == YearBuilt, 0, 1),
+         RemodAdd = YearRemodAdd - YearBuilt) %>%
+  select(-YearRemodAdd)
+
+house_test <- house_test %>%
+  mutate(isRemod = ifelse(YearRemodAdd == YearBuilt, 0, 1),
+         RemodAdd = YearRemodAdd - YearBuilt) %>%
+  select(-YearRemodAdd)
+
+grid.arrange(
+  ggplot(house_train, aes(YearBuilt,RemodAdd)) +
+    geom_point(aes(color = as.factor(isRemod))),
+  ggplot(house_test, aes(YearBuilt, RemodAdd)) +
+    geom_point(aes(color = as.factor(isRemod))),
+  ncol = 2
+)
+```
+
+
+### 4.5 Zero- and near Zero-Variance Predictors
+
+```{r zero_var}
+nzv <- nearZeroVar(house_train[, -length(house_train)], 
+                   freqCut = 99/1,
+                   uniqueCut = 5,
+                   saveMetrics= TRUE)
+nzv[nzv$nzv,]
+house_train[, rownames(nzv[nzv$nzv,])] <- NULL
+house_test[, rownames(nzv[nzv$nzv,])] <- NULL
+dim(house_train)
+dim(house_test)
+```
+
+
+### 4.6 Imputing other Features using KNN
+
+```{r preProc_numerical}
+
+## use knn to impute all numerical varialbes
+# preProc_numerical <- preProcess(house_train[, -length(house_train)],
+#                                 method = c("knnImpute"))
+# print(preProc_numerical)
+# house_train[, -length(house_train)] <- predict(preProc_numerical, 
+#                               house_train[, -length(house_train)])
+# house_test <- predict(preProc_numerical, house_test)
+
+## Caret only handles numerical features
+## use kNN to impute categorical features 
+house_train[, -length(house_train)] <- kNN(house_train[, -length(house_train)],
+                                           k=5)[,names(house_train)[-length(house_train)]]
+house_test <- kNN(house_test, k=5)[,names(house_test)]
+
+## Double check missingness with the following code
+aggr(house_train, prop = F, numbers = T)
+aggr(house_test, prop = F, numbers = T)
+```
+
+### 4.7 Transforming `SalePrice` to log scale
+
+```{r logtrans}
+## Transform SalePrice to log scale
+house_train$SalePrice <- log(house_train$SalePrice + 1)
+```
+
+### 4.8 (Optional) Saving data
+
+```{r save_preProc}
+save(house_train, house_test, file = "./house_preProc.RData")
+```
+
+# Modeling
+
+## 5.1 Model Training and Parameter Tuning
+
+### Loading data (from step 4)
+
+```{r read_preProc}
+rm(list = ls()) # clear workspace
+library(caret)
+load("./house_preProc.RData")
+```
+
+### 5.2 Data Splitting using `createDataPartiton`
+
+```{r split_data}
+## Perform single 80%/20% random split of house_train
+library(caret)
+set.seed(321)
+trainIdx <- createDataPartition(house_train$SalePrice, 
+                                p = .8,
+                                list = FALSE,
+                                times = 1)
+subTrain <- house_train[trainIdx,]
+subTest <- house_train[-trainIdx,]
+print(head(subTrain))
+```
+
+### 5.2 Setting up resampling method using `trainControl`
+
+```{r trainCtrl}
+set.seed(456)
+fitCtrl <- trainControl(method = "repeatedcv",
+                        number = 5,
+                        repeats = 3,
+                        verboseIter = FALSE,
+                        summaryFunction = defaultSummary)
+```
+
+
+## 6.1 Basic Linear Regression
+First of all let's build a <strong>multiple linear model</strong> to use all predictors to predict <strong>SalePrice</strong>:
+
+- Train ML model with <strong>train</strong>
+- Evaluate variable importance
+- Predict on test dataset with <strong>predict</strong>
+- Measure performance
+
+```{r linearreg}
+lmFit <- train(SalePrice ~., data = subTrain,
+               method = "lm")
+# summary(lmFit)
+## Call:
+## lm(formula = .outcome ~ ., data = dat)
+## ... ...
+## Residual standard error: 0.1152 on 915 degrees of freedom
+## Multiple R-squared:  0.935,	Adjusted R-squared:  0.917 
+## F-statistic:    52 on 253 and 915 DF,  p-value: < 2.2e-16
+```
+
+### 6.2 Linear Regression Variable Importance
+
+```{r linreg_var_imp}
+lmImp <- varImp(lmFit, scale = FALSE)
+## lm variable importance
+##
+##  only 20 most important variables shown (out of 253)
+## 
+##                      Overall
+## MSZoningRL             8.151
+## MSZoningFV             7.881
+## MSZoningRM             7.659
+## MSZoningRH             6.977
+## SaleConditionAbnorml   5.433
+## OverallQual1           5.309
+## LandContourBnk         4.292
+```
+
+Note: linear models use the absolute value of the t-statistic.
+
+```{r linreg_var_importance}
+plot(lmImp, top = 20)
+```
+
+### 6.3 Performance Measures for Linear Regression
+
+```{r linreg_train_rmse}
+mean(lmFit$resample$RMSE)
+```
+```{r linreg_test_rmse}
+predicted <- predict(lmFit, subTest)
+RMSE(pred = predicted, obs = subTest$SalePrice)
+```
+```{r linreg_predictions_plot}
+ggplot(subTest, aes(x = exp(SalePrice)-1, y = exp(predicted)-1)) +
+  geom_point() + 
+  coord_fixed()
+```
+
+
+
+## 7.1 Linear Regression with Elastic Net Regularization - Grid search with `train`
+
+```{r train_lasso}
+enetGrid <- expand.grid(alpha = seq(0, 1, .1),
+                        lambda = seq(0, .6, .01))
+
+set.seed(1234)  # for reproducibility
+enetFit <- train(SalePrice ~ .,
+                 data = subTrain,
+                 method="glmnet",
+                 metric="RMSE",
+                 trControl=fitCtrl,
+                 tuneGrid=enetGrid)
+print(enetFit$bestTune)
+```
+
+### 7.2 Choosing the Parameters
+```{r reg_plots}
+plot(enetFit)
+plot(enetFit, plotType = "level")
+```
+
+### 7.3 Regularization Feature Importance
+```{r reg_feature_imp}
+enetVarImp <- varImp(enetFit, scale = FALSE)
+plot(enetVarImp, top = 20)
+mean(enetFit$resample$RMSE)
+```
+
+### 7.4 Analyzing the Regularized Regression Performance
+
+```{r enet_mean_rmse}
+mean(enetFit$resample$RMSE)
+```
+```{r enet_predicted_rmse}
+predicted <- predict(enetFit, subTest)
+RMSE(pred = predicted, obs = subTest$SalePrice)
+```
+
+```{r predict_lasso}
+
+subTest$predicted <- predict(enetFit, subTest)
+ggplot(subTest, aes(x = SalePrice, y = predicted)) + geom_point()
+```
+
+
+## 8.1 Tree-based Ensemble Models: Gradient Boosting Machines
+
+```{r train_gbm, results="hide"}
+fitCtrl <- trainControl(method = "cv",
+                        number = 5,
+                        verboseIter = TRUE,
+                        summaryFunction=defaultSummary)
+gbmGrid <- expand.grid( n.trees = seq(100,1000,100), 
+                        interaction.depth = seq(1,10,2), 
+                        shrinkage = c(0.1),
+                        n.minobsinnode = 10)
+gbmFit <- train(SalePrice ~ .,
+                data = subTrain, 
+                method = "gbm", 
+                trControl = fitCtrl,
+                tuneGrid=gbmGrid,
+                metric='RMSE',
+                maximize=FALSE)
+```
+
+### 8.2 gbm Parameters
+```{r gmb_plot}
+plot(gbmFit)
+gbmFit$bestTune
+```
+
+
+### 8.3 Performance Measures for gbm
+
+```{r g_train_rmse}
+mean(gbmFit$resample$RMSE)
+```
+```{r regularization_test_rmse}
+predicted <- predict(gbmFit, subTest)
+RMSE(pred = predicted, obs = subTest$SalePrice)
+```
+```{r gbm_predictions_plot}
+ggplot(subTest, aes(x = exp(SalePrice)-1, y = exp(predicted)-1)) +
+  geom_point() +
+  coord_fixed()
+```
+
+
+## 9. Summary
+
+| Model                                         | RMSE   |
+|-----------------------------------------------|--------|
+| Linear Regression (all variables)             | 0.1630 |  
+| Linear Regression with Regularization (Lasso) | 0.1368 |
+| Gradient Boosting Machines                    | 0.1280 |
