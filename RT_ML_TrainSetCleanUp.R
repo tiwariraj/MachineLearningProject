@@ -1,4 +1,4 @@
-###NYCDSA Bootcamp 12, Web Scrapping Project###
+###NYCDSA Bootcamp 12, Machine Learning Project###
 ###Raj Tiwari###
 
 library(data.table)
