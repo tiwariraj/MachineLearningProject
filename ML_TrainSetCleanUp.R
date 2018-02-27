@@ -14,7 +14,24 @@ library(multcomp)
 library(mice)
 train <- read.csv("train.csv",stringsAsFactors = FALSE)
 #test <- read_csv("test.csv")
-#table(train$MSSubClass)
+
+
+###########New Fields#################
+#total # of Half bathrooms
+train = train %>%  mutate(TotalHalfBath = train$HalfBath + train$BsmtHalfBath)
+
+#total # of Full bathrooms
+train = train %>%  mutate(TotalFullBath = train$FullBath + train$BsmtFullBath)
+
+#total SF (Finished)
+train = train %>%  mutate(TotalFinSF = train$GrLivArea + train$BsmtFinSF1 + train$BsmtFinSF2 + train$LowQualFinSF)
+train = train %>% mutate(., TotalFinSF = log(TotalFinSF))
+
+#Avg Size Rooms Abv Ground
+train = train %>%  mutate(AbvGrndRoomSize = (train$GrLivArea/ (train$TotRmsAbvGrd)))
+                          
+
+
 #split it into 1 story, 1.5 stories, 2 stories, split, projects
 train = train %>% mutate(MSSubClass = ifelse(MSSubClass %in% c(20), '1 story (new styles)', 
                                              ifelse(MSSubClass %in% c(30,40), '1 story older',
@@ -166,8 +183,9 @@ train <- train %>%
                                 ifelse(BsmtFinType1 == 'Rec', '3',
                                        ifelse(BsmtFinType1 == 'LwQ', '2',
                                               ifelse(BsmtFinType1 == 'Unf', '1', '0')))))))
+
 train$BsmtFinType1[is.na(train$BsmtFinType1)] <- 0
-train$BsmtFinType1 <- as.numeric(train$BsmtFinType1)
+
 #BsmtFinSF1
 train = train %>% mutate(BsmtFinSF1 = log(BsmtFinSF1 + 1))
 #BsmtFinType2
@@ -195,6 +213,7 @@ train <- train %>%
                   ifelse(HeatingQC == 'Gd', '3',
                          ifelse(HeatingQC == 'TA', '2',
                                 ifelse(HeatingQC == 'Fa', '1', '0')))))
+train$HeatingQC[is.na(train$HeatingQC)] <- 0
 train$HeatingQC <- as.numeric(train$HeatingQC)
 #CentralAir as-is
 
@@ -205,10 +224,11 @@ train <- train %>%
            ifelse(is.na(Electrical)==TRUE,'None',Electrical))
 
 # X1stFlrSF => log
-train = train %>% mutate(., x1stFlrSF = log(X1stFlrSF + 1))
+train = train %>% mutate(., X1stFlrSF = log(X1stFlrSF + 1))
 # X2ndFlrSF => log(+1)
-train = train %>% mutate(., x2ndFlrSF = log(X2ndFlrSF + 1))
+train = train %>% mutate(., X2ndFlrSF = log(X2ndFlrSF + 1))
 # LowQualFinSF As-is
+train = train %>% mutate(., GrLivArea = log(LowQualFinSF+1))
 # GrLivArea => log
 train = train %>% mutate(., GrLivArea = log(GrLivArea))
 # BsmtFullBath => As-is
@@ -313,10 +333,10 @@ train = train %>% mutate(EnclosedPorch = log(EnclosedPorch+1))
 train = train %>% mutate(hasEnlosedPorch = ifelse(EnclosedPorch == 0, 'No', 'Yes'))
 ############################Three Season Porch#########################
 #table(train$`3SsnPorch`)
-#train = train %>% mutate(hasX3SsnPorch = ifelse(train$X3SsnPorch == 0, 'No', 'Yes'))
+train = train %>% mutate(hasX3SsnPorch = ifelse(train$X3SsnPorch == 0, 'No', 'Yes'))
 #res.aov <- aov(SalePrice ~ hasX3SsnPorch, data = train)
 #TukeyHSD(res.aov)
-#train$hasX3SsnPorch=NULL
+train = train %>% dplyr::select(-X3SsnPorch)
 ############################Screen Porch#########################
 #table(train$ScreenPorch)
 train = train %>% mutate(hasScreenPorch = ifelse(ScreenPorch == 0, 'No', 'Yes'))
@@ -404,4 +424,7 @@ train = train %>% mutate(SaleType = ifelse(SaleType %in% c('WD','CWD','VWD'), 'W
 ########################################################Sale Price (confirm transformation)
 #train = train %>% mutate(SalePrice = log((SalePrice)+1))
 
+
+
 write.csv(train,file="clean_train.csv")
+
