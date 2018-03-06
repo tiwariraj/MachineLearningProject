@@ -15,7 +15,6 @@ library(mice)
 train <- read.csv("train.csv",stringsAsFactors = FALSE)
 #test <- read_csv("test.csv")
 
-
 ###########New Fields#################
 #total # of Half bathrooms
 train = train %>%  mutate(TotalHalfBath = train$HalfBath + train$BsmtHalfBath)
@@ -29,31 +28,21 @@ train = train %>% mutate(., TotalFinSF = log(TotalFinSF))
 
 #Avg Size Rooms Abv Ground
 train = train %>%  mutate(AbvGrndRoomSize = (train$GrLivArea/ (train$TotRmsAbvGrd)))
-                          
 
 
 #split it into 1 story, 1.5 stories, 2 stories, split, projects
-train = train %>% mutate(MSSubClass = ifelse(MSSubClass %in% c(20), '1 story (new styles)', 
-                                             ifelse(MSSubClass %in% c(30,40), '1 story older',
-                                                    ifelse(MSSubClass %in% c(45,50), '1.5 stories',
-                                                           ifelse(MSSubClass %in% c(60, 75), '2 story newer',
-                                                                  ifelse(MSSubClass %in% c(70), '2 story older',
-                                                                         ifelse(MSSubClass %in% c(80,85), 'split',
-                                                                                ifelse(MSSubClass %in% c(90), 'duplex', 'projects'))))))))
+train = train %>% mutate(MSSubClass = ifelse(MSSubClass %in% c(20), '1-Story (Newer)', 
+                                           ifelse(MSSubClass %in% c(30,40), '1-Story (Older)',
+                                                  ifelse(MSSubClass %in% c(45,50), '1-1/2 Story',
+                                                         ifelse(MSSubClass %in% c(60, 75), '2-story (Newer)',
+                                                                ifelse(MSSubClass %in% c(70), '2-story (Older)',
+                                                                       ifelse(MSSubClass %in% c(80,85), 'Split',
+                                                                              ifelse(MSSubClass %in% c(90), 'Duplex', 'Projects'))))))))
 #split zoning into medium-high, low, floating, and miscelanneoius
-train = train %>% mutate(MSZoning = ifelse(MSZoning %in% c('RH', 'RM'), 'medium-high density',
-                                           ifelse(MSZoning == 'RL', 'low density',
-                                                  ifelse(MSZoning == 'FV', 'floating', 'misc'))))
-#lot frontage
-# LF_impute <- mice(train, m=5, maxit = 50, method = 'pmm', seed = 500)
-# 
-# counter = 1
-# for (i in 1:1460) {
-#   if (is.na(train$LotFrontage[i]) == TRUE) {
-#     train$LotFrontage[i] = as.numeric(rowMeans(LF_impute$imp$LotFrontage))[counter]
-#     counter = counter + 1
-#   }
-# }
+train = train %>% mutate(MSZoning = ifelse(MSZoning %in% c('RH', 'RM'), 'Medium-High Density',
+                                           ifelse(MSZoning == 'RL', 'Low Density',
+                                                  ifelse(MSZoning == 'FV', 'Floating', 'Other'))))
+
 #lot area - logged
 train = train %>% mutate(LotArea = log(LotArea))
 #summary(train$LotArea)
@@ -69,17 +58,17 @@ train = train %>% dplyr::select(-Utilities)
 #land slope - as is
 #neighborhood - as is
 #condition 1 - near positive fature, near railrod, near street, normal
-train = train %>% mutate(Condition1 = ifelse(Condition1 %in% c('Artery', 'Feedr'), 'near street',
-                                             ifelse(Condition1 %in% c('RRAe', 'RRAn', 'RRNe', 'RRNn'),'near railroad',
-                                                    ifelse(Condition1 %in% c('PosA', 'PosN'), 'near positive feature', 'Normal'
+train = train %>% mutate(Condition1 = ifelse(Condition1 %in% c('Artery', 'Feedr'), 'Near Street',
+                                             ifelse(Condition1 %in% c('RRAe', 'RRAn', 'RRNe', 'RRNn'),'Near Railroad',
+                                                    ifelse(Condition1 %in% c('PosA', 'PosN'), 'Near Positive Feature', 'Normal'
                                                     ))))
 #condition 2 - drop
 train = train %>% dplyr::select(-Condition2)
 #building type- as is
 #housestyle
-train = train %>% mutate(HouseStyle = ifelse(HouseStyle %in% c('1.5Fin', '1.5Unf'), '1.5 stories',
-                                             ifelse(HouseStyle %in% c('1Story'), '1 story',
-                                                    ifelse(HouseStyle %in% c('2.5Fin', '2.5Unf', '2Story'), '2 stories', 'foyer'))))
+train = train %>% mutate(HouseStyle = ifelse(HouseStyle %in% c('1.5Fin', '1.5Unf'), '1-1/2-story',
+                                            ifelse(HouseStyle %in% c('1Story'), '1-story',
+                                                   ifelse(HouseStyle %in% c('2.5Fin', '2.5Unf', '2Story'), '2-story', 'Split'))))
 #overalqual as it
 #overalcond as is
 #year remolded
@@ -118,6 +107,7 @@ train <- train %>%
 #MasVnrType
 #table(train$MasVnrType)
 #table(train$MasVnrType)
+
 train <- train %>%
   mutate(MasVnrType = 
            ifelse(MasVnrType %in% c('BrkCmn', 'BrkFace'), 'Brick',
@@ -228,7 +218,7 @@ train = train %>% mutate(., X1stFlrSF = log(X1stFlrSF + 1))
 # X2ndFlrSF => log(+1)
 train = train %>% mutate(., X2ndFlrSF = log(X2ndFlrSF + 1))
 # LowQualFinSF As-is
-train = train %>% mutate(., GrLivArea = log(LowQualFinSF+1))
+train = train %>% mutate(., LowQualFinSF = log(LowQualFinSF+1))
 # GrLivArea => log
 train = train %>% mutate(., GrLivArea = log(GrLivArea))
 # BsmtFullBath => As-is
@@ -246,11 +236,21 @@ train = train %>% mutate(KitchenQual = ifelse(is.na(KitchenQual)==TRUE,0,
 # TotalRmsAbvGrd => As-is
 # Functional Columns => Reducing the total number of groups; Min = Min1 | Min2, Maj = Maj1 | Maj2
 # Remaining groups are: Typ, Min, Mod, Maj, Sev, Sal
-train = train %>% mutate(KitchenQual = ifelse(is.na(Functional)==TRUE,0,
-                                              ifelse(Functional =='Po',1,
-                                                     ifelse(Functional == 'Fa', 2,
-                                                            ifelse(Functional == 'TA', 3,
-                                                                   ifelse(Functional == 'Gd', 4,5))))))
+train = train %>% mutate(Functional = ifelse(is.na(Functional)==TRUE,'Unknown',
+                                              ifelse(Functional %in% c('Typ'),'Typical',
+                                                     ifelse(Functional %in% c('Min1', 'Min2'), 'Minor',
+                                                            ifelse(Functional %in% c('Maj1', 'Maj2'), 'Major',
+                                                             ifelse(Functional == 'Sev', 'Severe',
+                                                                   ifelse(Functional == 'Sal', 'Salvage')))))))
+
+
+
+train <- train %>%
+  mutate(MasVnrType = 
+           ifelse(MasVnrType %in% c('BrkCmn', 'BrkFace'), 'Brick',
+                  ifelse(MasVnrType %in% c('CBlock'), 'CBlock',
+                         ifelse(MasVnrType %in% c('None'), 'None', 'Stone'))))
+
 # Fireplaces => As-is
 # FireplaceQu => ordinal; NA = 0, Po = 1, Fa = 2, TA = 3, Gd = 4, Ex = 5
 train = train %>% mutate(FireplaceQu = ifelse(is.na(FireplaceQu)==TRUE,0,
@@ -266,7 +266,10 @@ train = train %>% mutate(GarageType = ifelse(is.na(GarageType)==TRUE,0,
                                                                   ifelse(GarageType == 'Gd', 4,5))))))
 # Adding new field: New_Field_1 = log(YrSold - GarageYrBuilt) | I don't know why we want this 
 #### There are NA values here and I'm not sure the proper way of imputing them
-train[is.na(train$GarageYrBlt),]<-0
+train <- train %>%
+  mutate(GarageYrBlt = 
+           ifelse(is.na(GarageYrBlt)==TRUE,0,GarageYrBlt))
+
 train = train %>% mutate(., YrSold_Garage_Difference = log((YrSold - GarageYrBlt)+1))
 # GarageFinish => update NA to No Garage
 train = train %>% mutate(GarageFinish = ifelse(is.na(GarageFinish)==TRUE,0,
@@ -407,8 +410,8 @@ train = train %>% mutate(MiscVal = log(MiscVal+1))
 #group sale type
 train = train %>% mutate(SaleType = ifelse(SaleType %in% c('WD','CWD','VWD'), 'Warranty Deed', 
                                            ifelse(SaleType %in% c('New'), 'New Home',
-                                                  ifelse(SaleType %in% c('COD'), 'Court Deed/Estate',
-                                                         ifelse(SaleType %in% c('ConLD', 'ConLI','ConLw'), 'Low Interest/Down Payment',
+                                                  ifelse(SaleType %in% c('COD'), 'CourtDeed_Estate',
+                                                         ifelse(SaleType %in% c('ConLD', 'ConLI','ConLw'), 'LowInterest_DownPayment',
                                                                 ifelse(SaleType %in% c('Con'), 'Regular Terms', 'Other'))))))
 #colSums(is.na(train))
 ###################################Sale Condition########################################
@@ -424,6 +427,17 @@ train = train %>% mutate(SaleType = ifelse(SaleType %in% c('WD','CWD','VWD'), 'W
 ########################################################Sale Price (confirm transformation)
 #train = train %>% mutate(SalePrice = log((SalePrice)+1))
 
+
+#lot frontage
+LF_impute <- mice(train, m=5, maxit = 50, method = 'pmm', seed = 500)
+
+counter = 1
+for (i in 1:1460) {
+  if (is.na(train$LotFrontage[i]) == TRUE) {
+    train$LotFrontage[i] = as.numeric(rowMeans(LF_impute$imp$LotFrontage))[counter]
+    counter = counter + 1
+  }
+}
 
 
 write.csv(train,file="clean_train.csv")
