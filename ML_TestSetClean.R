@@ -1,4 +1,5 @@
-#Machine Learning Project#
+#Machine Learning - Ames Iowa Housing Prediction
+#Test Data Set Pre-Processing
 getwd()
 rm(list = ls())
 library(dplyr)
@@ -14,7 +15,7 @@ library(multcomp)
 library(mice)
 
 test <- read.csv("test.csv",stringsAsFactors = FALSE)
-#train <- read.csv("train.csv",stringsAsFactors = FALSE)
+
 
 ###########New Fields#################
 #total # of Half bathrooms
@@ -75,13 +76,13 @@ test = test %>% dplyr::select(-Condition2)
 test = test %>% mutate(HouseStyle = ifelse(HouseStyle %in% c('1.5Fin', '1.5Unf'), '1-1/2-story',
                                            ifelse(HouseStyle %in% c('1Story'), '1-story',
                                                   ifelse(HouseStyle %in% c('2.5Fin', '2.5Unf', '2Story'), '2-story', 'Split'))))
-#overalqual as it
+#overalqual as is
 #overalcond as is
 #year remolded
 test = test %>% mutate(YearRemodAdd = ifelse(YearRemodAdd == YearBuilt, 1, 0))
 #year build- diff logged
 test = test %>% mutate(YearBuilt = log((YrSold - YearBuilt)+1))
-######MHUNG CODE######
+
 #leaving RoofStyle as is
 #RoofMatl
 test <- test %>%
@@ -277,10 +278,8 @@ test = test %>% mutate(GarageType = ifelse(is.na(GarageType)==TRUE,0,
                                                   ifelse(GarageType == 'Fa', 2,
                                                          ifelse(GarageType == 'TA', 3,
                                                                 ifelse(GarageType == 'Gd', 4,5))))))
-# Adding new field: New_Field_1 = log(YrSold - GarageYrBuilt) | I don't know why we want this 
-#### There are NA values here and I'm not sure the proper way of imputing them
-test <- test %>%
-  mutate(GarageYrBlt = 
+# Adding new field: New_Field_1 = log(YrSold - GarageYrBuilt)
+mutate(GarageYrBlt = 
            ifelse(is.na(GarageYrBlt)==TRUE,0,GarageYrBlt))
 
 test = test %>% mutate(., YrSold_Garage_Difference = log((YrSold - GarageYrBlt)+1))
@@ -313,8 +312,8 @@ test = test %>% mutate(GarageCond = ifelse(is.na(GarageCond)==TRUE,0,
                                                   ifelse(GarageCond == 'Fa', 2,
                                                          ifelse(GarageCond == 'TA', 3,
                                                                 ifelse(GarageCond == 'Gd', 4,5))))))
-######RTIWARI CODE######
-###########################Paved Drive Way (Ordinal) - As-Is##############################
+
+#Paved Drive Way (Ordinal) - As-Is
 #table(test$PavedDrive)
 #ggplot(test, aes(x = test$PavedDrive,y = test$SalePrice)) + geom_boxplot() + coord_flip()
 #paved_anova = test %>% 
@@ -327,7 +326,7 @@ test = test %>% mutate(GarageCond = ifelse(is.na(GarageCond)==TRUE,0,
 #TukeyHSD(res.aov)
 #pairwise.t.test(test$SalePrice, test$PavedDrive,
 #               p.adjust.method = "BH", pool.sd = FALSE)
-############################Wood Deck SF (transformation)#########################
+#Wood Deck SF (transformation)
 # summary(test$WoodDeckSF)
 # ggplot(test, aes(WoodDeckSF)) +
 #   geom_histogram(binwidth = 50)
@@ -338,7 +337,7 @@ test = test %>% mutate(GarageCond = ifelse(is.na(GarageCond)==TRUE,0,
 test = test %>% mutate(WoodDeckSF = log(WoodDeckSF+1))
 #Deck (Yes,No)
 test = test %>% mutate(hasDeck = ifelse(WoodDeckSF == 0, 'No', 'Yes'))
-############################Open Porch SF (transformation)#########################
+#Open Porch SF (transformation)#
 # summary(test$OpenPorchSF)
 # ggplot(test, aes(OpenPorchSF)) +
 #   geom_histogram(binwidth = 50)
@@ -349,31 +348,36 @@ test = test %>% mutate(hasDeck = ifelse(WoodDeckSF == 0, 'No', 'Yes'))
 test = test %>% mutate(OpenPorchSF = log(OpenPorchSF+1))
 #hasOpenPorch (Yes,No)
 test = test %>% mutate(hasOpenPorch = ifelse(OpenPorchSF == 0, 'No', 'Yes'))
-############################Encolsed Porch(transformation)#########################
+
+#Encolsed Porch(transformation)#
 #summary(test$EnclosedPorch)
 #Log +1 Transformation
 test = test %>% mutate(EnclosedPorch = log(EnclosedPorch+1))
 #hasEnclosedPorch (Yes,No)
 test = test %>% mutate(hasEnlosedPorch = ifelse(EnclosedPorch == 0, 'No', 'Yes'))
-############################Three Season Porch#########################
+
+###Three Season Porch
+
 #table(test$`3SsnPorch`)
 test = test %>% mutate(hasX3SsnPorch = ifelse(test$X3SsnPorch == 0, 'No', 'Yes'))
 #res.aov <- aov(SalePrice ~ hasX3SsnPorch, data = test)
 #TukeyHSD(res.aov)
 test = test %>% dplyr::select(-X3SsnPorch)
-############################Screen Porch#########################
+
+#Screen Porch##
 #table(test$ScreenPorch)
 test = test %>% mutate(hasScreenPorch = ifelse(ScreenPorch == 0, 'No', 'Yes'))
 # res.aov <- aov(SalePrice ~ hasScreenPorch, data = test)
 # TukeyHSD(res.aov)
 #test$hasX3SsnPorch=NULL
 test = test %>% mutate(ScreenPorch = log(ScreenPorch+1))
-############################Pool Area#########################
+
+#Pool Area##
 #summary(log(test$PoolArea+1))
 #ggplot(test, aes(PoolArea)) +
 #  geom_histogram(binwidth = 50)
 
-############################Pool QC#########################
+##Pool QC##
 # Ex    Excellent
 # Gd    Good
 # TA    Average/Typical
@@ -384,7 +388,8 @@ test = test %>% mutate(hasPool = ifelse(test$PoolArea == 0 ,0 , 1))
 test = test %>% dplyr::select(-PoolQC)
 
 test = test %>% dplyr::select(-PoolArea)
-############################Fence#########################
+
+###Fence######
 #table(test$Fence)
 # Fence (Ordinal): Fence quality
 # 
@@ -397,27 +402,32 @@ test = test %>% dplyr::select(-PoolArea)
 #table(test$Fence)
 test = test %>% mutate(hasFence = ifelse(is.na(test$Fence)==TRUE,0,1))
 test = test %>% dplyr::select(-Fence)
-#########################################Misc Feature####################################
+
+##Misc Feature###
 #table(test$MiscFeature)
 # Gar2 Othr Shed TenC 
 # 2    2   49    1 
 test = test %>% dplyr::select(-MiscFeature)
-########################################Misc Value#####################################
+
+###Misc Value######
 #table(test$MiscVal)
 test = test %>% mutate(MiscVal = log(MiscVal+1))
 #ggplot(test, aes(MiscVal)) +
 #  geom_histogram(binwidth = 2)
-#####################################Mo Sold############################################
+
+####Mo Sold#####
 # ggplot(data= test) +
 #   aes(x = test$MoSold,
 #       y = test$SalePrice)+
 #   stat_summary(fun.y=mean, geom="bar")
-###################################Year Sold########################################
+
+###Year Sold####
 # ggplot(data= test) +
 #   aes(x = test$YrSold,
 #       y = test$SalePrice)+
 #   stat_summary(aes(fill = factor(YrSold)),fun.y=mean, geom="bar")
-###################################Sale Type########################################
+
+####Sale Type####
 #table(test$SaleType)
 # WD    Warranty Deed - Conventional
 # CWD   Warranty Deed - Cash
@@ -436,7 +446,8 @@ test = test %>% mutate(SaleType = ifelse(SaleType %in% c('WD','CWD','VWD'), 'War
                                                          ifelse(SaleType %in% c('ConLD', 'ConLI','ConLw'), 'LowInterest_DownPayment',
                                                                 ifelse(SaleType %in% c('Con'), 'Regular Terms', 'Other'))))))
 #colSums(is.na(test))
-###################################Sale Condition########################################
+
+######Sale Condition####
 #ggplot(test, aes(x = test$SaleCondition,y = test$SalePrice)) + geom_boxplot() + coord_flip()
 # condition_anova = test %>% 
 #   dplyr::group_by(.,test$SaleCondition) %>% 
@@ -446,7 +457,8 @@ test = test %>% mutate(SaleType = ifelse(SaleType %in% c('WD','CWD','VWD'), 'War
 #     sd = sd(SalePrice, na.rm = TRUE))
 # 
 # condition_anova
-########################################################Sale Price (confirm transformation)
+
+###Sale Price
 #test = test %>% mutate(SalePrice = log((SalePrice)+1))
 
 

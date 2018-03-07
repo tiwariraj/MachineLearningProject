@@ -1,4 +1,5 @@
-#Machine Learning Project#
+#Machine Learning - Ames Iowa Housing Prediction
+#Train Data Set Pre-Processing
 getwd()
 rm(list = ls())
 library(dplyr)
@@ -13,7 +14,7 @@ library(missForest)
 library(multcomp)
 library(mice)
 train <- read.csv("train.csv",stringsAsFactors = FALSE)
-#test <- read_csv("test.csv")
+
 
 ###########New Fields#################
 #total # of Half bathrooms
@@ -264,8 +265,7 @@ train = train %>% mutate(GarageType = ifelse(is.na(GarageType)==TRUE,0,
                                                     ifelse(GarageType == 'Fa', 2,
                                                            ifelse(GarageType == 'TA', 3,
                                                                   ifelse(GarageType == 'Gd', 4,5))))))
-# Adding new field: New_Field_1 = log(YrSold - GarageYrBuilt) | I don't know why we want this 
-#### There are NA values here and I'm not sure the proper way of imputing them
+# Adding new field: New_Field_1 = log(YrSold - GarageYrBuilt) 
 train <- train %>%
   mutate(GarageYrBlt = 
            ifelse(is.na(GarageYrBlt)==TRUE,0,GarageYrBlt))
@@ -292,8 +292,8 @@ train = train %>% mutate(GarageCond = ifelse(is.na(GarageCond)==TRUE,0,
                                                     ifelse(GarageCond == 'Fa', 2,
                                                            ifelse(GarageCond == 'TA', 3,
                                                                   ifelse(GarageCond == 'Gd', 4,5))))))
-######RTIWARI CODE######
-###########################Paved Drive Way (Ordinal) - As-Is##############################
+
+##Paved Drive Way (Ordinal) - As-Is
 #table(train$PavedDrive)
 #ggplot(train, aes(x = train$PavedDrive,y = train$SalePrice)) + geom_boxplot() + coord_flip()
 #paved_anova = train %>% 
@@ -306,6 +306,7 @@ train = train %>% mutate(GarageCond = ifelse(is.na(GarageCond)==TRUE,0,
 #TukeyHSD(res.aov)
 #pairwise.t.test(train$SalePrice, train$PavedDrive,
 #               p.adjust.method = "BH", pool.sd = FALSE)
+
 ############################Wood Deck SF (transformation)#########################
 # summary(train$WoodDeckSF)
 # ggplot(train, aes(WoodDeckSF)) +
@@ -317,6 +318,7 @@ train = train %>% mutate(GarageCond = ifelse(is.na(GarageCond)==TRUE,0,
 train = train %>% mutate(WoodDeckSF = log(WoodDeckSF+1))
 #Deck (Yes,No)
 train = train %>% mutate(hasDeck = ifelse(WoodDeckSF == 0, 'No', 'Yes'))
+
 ############################Open Porch SF (transformation)#########################
 # summary(train$OpenPorchSF)
 # ggplot(train, aes(OpenPorchSF)) +
@@ -328,18 +330,21 @@ train = train %>% mutate(hasDeck = ifelse(WoodDeckSF == 0, 'No', 'Yes'))
 train = train %>% mutate(OpenPorchSF = log(OpenPorchSF+1))
 #hasOpenPorch (Yes,No)
 train = train %>% mutate(hasOpenPorch = ifelse(OpenPorchSF == 0, 'No', 'Yes'))
+
 ############################Encolsed Porch(transformation)#########################
 #summary(train$EnclosedPorch)
 #Log +1 Transformation
 train = train %>% mutate(EnclosedPorch = log(EnclosedPorch+1))
 #hasEnclosedPorch (Yes,No)
 train = train %>% mutate(hasEnlosedPorch = ifelse(EnclosedPorch == 0, 'No', 'Yes'))
+
 ############################Three Season Porch#########################
 #table(train$`3SsnPorch`)
 train = train %>% mutate(hasX3SsnPorch = ifelse(train$X3SsnPorch == 0, 'No', 'Yes'))
 #res.aov <- aov(SalePrice ~ hasX3SsnPorch, data = train)
 #TukeyHSD(res.aov)
 train = train %>% dplyr::select(-X3SsnPorch)
+
 ############################Screen Porch#########################
 #table(train$ScreenPorch)
 train = train %>% mutate(hasScreenPorch = ifelse(ScreenPorch == 0, 'No', 'Yes'))
@@ -347,6 +352,7 @@ train = train %>% mutate(hasScreenPorch = ifelse(ScreenPorch == 0, 'No', 'Yes'))
 # TukeyHSD(res.aov)
 #train$hasX3SsnPorch=NULL
 train = train %>% mutate(ScreenPorch = log(ScreenPorch+1))
+
 ############################Pool Area#########################
 #summary(log(train$PoolArea+1))
 #ggplot(train, aes(PoolArea)) +
